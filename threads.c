@@ -2,6 +2,8 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <setjmp.h>
+#include <signal.h>
 
 /* You can support more threads. At least support this many. */
 #define MAX_THREADS 128
@@ -24,6 +26,8 @@
 #define JB_RSP 6
 #define JB_PC 7
 
+#define MAIN_THREAD_ID 0
+
 /* thread_status identifies the current state of a thread. You can add, rename,
  * or delete these values. This is only a suggestion. */
 enum thread_status
@@ -32,6 +36,13 @@ enum thread_status
 	TS_RUNNING,
 	TS_READY
 };
+
+/* global thread array */
+struct thread_control_block* TCB_arr[MAX_THREADS];
+/* thread id counter */
+int thread_arr_id = 0;
+/* main thread TCB */
+struct thread_control_block* main_thread;
 
 /* The thread control block stores information about a thread. You will
  * need one of this per thread.
@@ -42,7 +53,15 @@ struct thread_control_block {
 	/* TODO: add information about its registers */
 	/* TODO: add information about the status (e.g., use enum thread_status) */
 	/* Add other information you need to manage this thread */
+	pthread_t t_id;
+	enum thread_status t_status;
+	jmp_buf t_env;
+	void *t_stackTail;
+	int t_argc;
+	char** t_argv;
+	void (*start_func)(int,char**);
 };
+
 
 static void schedule(int signal)
 {
@@ -52,6 +71,10 @@ static void schedule(int signal)
 	 * 2. Determine which is the next thread that should run
 	 * 3. Switch to the next thread (use longjmp on that thread's jmp_buf)
 	 */
+	if(setjmp()){
+
+	}
+	longjmp()
 }
 
 static void scheduler_init()
@@ -64,6 +87,13 @@ static void scheduler_init()
 	 *   Just make sure they are correctly referenced in your TCB.
 	 * - Set up your timers to call schedule() at a 50 ms interval (SCHEDULER_INTERVAL_USECS)
 	 */
+	signal(SIGALRM,schedule);
+	int *t_stack;
+	t_stack = (int *)malloc(THREAD_STACK_SIZE);
+	main_thread = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
+	main_thread->t_id = MAIN_THREAD_ID;
+	main_thread->t_status = TS_RUNNING;
+	main_thread->t_stackTail = t_stack;
 }
 
 int pthread_create(
@@ -77,7 +107,10 @@ int pthread_create(
 		is_first_call = false;
 		scheduler_init();
 	}
-
+	// Create thread stack
+	int *t_stack;
+	t_stack = (int *)malloc(THREAD_STACK_SIZE);
+	TCB_arr[thread_arr_id++] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
 	/* TODO: Return 0 on successful thread creation, non-zero for an error.
 	 *       Be sure to set *thread on success.
 	 * Hints:
