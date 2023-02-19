@@ -37,10 +37,10 @@ enum thread_status
 	TS_READY
 };
 
-/* global thread array */
-struct thread_control_block* TCB_arr[MAX_THREADS];
-/* thread id counter */
-int thread_arr_id = 0;
+/* current running thread */
+static pthread_t glb_thread_curr = -1;
+/* count thread id */
+static pthread_idNum = 1;
 /* main thread TCB */
 struct thread_control_block* main_thread;
 
@@ -55,11 +55,9 @@ struct thread_control_block {
 	/* Add other information you need to manage this thread */
 	pthread_t t_id;
 	enum thread_status t_status;
+	char *t_stackTail;
 	jmp_buf t_env;
-	void *t_stackTail;
-	int t_argc;
-	char** t_argv;
-	void (*start_func)(int,char**);
+	struct thread_control_block* t_next;
 };
 
 
@@ -87,13 +85,27 @@ static void scheduler_init()
 	 *   Just make sure they are correctly referenced in your TCB.
 	 * - Set up your timers to call schedule() at a 50 ms interval (SCHEDULER_INTERVAL_USECS)
 	 */
-	signal(SIGALRM,schedule);
-	int *t_stack;
-	t_stack = (int *)malloc(THREAD_STACK_SIZE);
+
+	/* setup alarm timer and signal */
+	struct sigaction alrm_struct;
+    alrm_struct.sa_flags = SA_NODEFER;
+    alrm_struct.sa_handler = schedule;
+    sigaction(SIGALRM,&alrm_struct,0);
+
+	/* setup main thread */
+	char *main_stack = (char *)malloc(THREAD_STACK_SIZE);
 	main_thread = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
 	main_thread->t_id = MAIN_THREAD_ID;
-	main_thread->t_status = TS_RUNNING;
-	main_thread->t_stackTail = t_stack;
+	main_thread->t_status = NULL;
+	main_thread->t_stackTail = main_stack;
+	main_thread->t_next = NULL;
+
+	ualarm(SCHEDULER_INTERVAL_USECS,SCHEDULER_INTERVAL_USECS);
+}
+
+/* init env for pthread_create */
+void pthread_init(struct thread_control_block* thread,char* stk_ptr){
+
 }
 
 int pthread_create(
@@ -107,10 +119,14 @@ int pthread_create(
 		is_first_call = false;
 		scheduler_init();
 	}
-	// Create thread stack
-	int *t_stack;
-	t_stack = (int *)malloc(THREAD_STACK_SIZE);
-	TCB_arr[thread_arr_id++] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
+
+	/* malloc TCB for new thread */
+	struct thread_control_block* n_thread = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
+	char* t_stack = (char *)malloc(THREAD_STACK_SIZE);
+	n_thread->t_stackTail = t_stack;
+	n_thread->t_id = pthread_idNum++;
+	n_thread->t_status = TS_RUNNING;
+	pthread_init(n_thread,);
 	/* TODO: Return 0 on successful thread creation, non-zero for an error.
 	 *       Be sure to set *thread on success.
 	 * Hints:
@@ -173,7 +189,7 @@ pthread_t pthread_self(void)
 	 * Hint: this function can be implemented in one line, by returning
 	 * a specific variable instead of -1.
 	 */
-	return -1;
+	return glb_thread_curr;
 }
 
 /* Don't implement main in this file!
