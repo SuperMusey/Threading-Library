@@ -6,8 +6,7 @@
 #include <unistd.h>
 
 //http://www.csl.mtu.edu/cs4411.ck/common/Coroutines.pdf
-//Multithread with setjmp
-
+//Multithread
 int glob_test = 0;
 void *thread_func(void *args){
     //sleep(1);

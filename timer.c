@@ -3,6 +3,8 @@
 #include <signal.h>
 #include <stdlib.h>
 
+/* Test sigaction and ualarm */
+
 void alrm_action(int signum){
     printf("Alarm rcvd\n");
     return;

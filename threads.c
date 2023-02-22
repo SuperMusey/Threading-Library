@@ -37,12 +37,12 @@ enum thread_status
 	TS_READY
 };
 
+/* array of TCBS (no need to delete exited thread) */
+struct thread_control_block* TCB_arr[MAX_THREADS];
 /* current running thread */
-static pthread_t glb_thread_curr = -1;
+pthread_t glb_thread_curr = -1;
 /* count thread id */
-static pthread_idNum = 1;
-/* main thread TCB */
-struct thread_control_block* main_thread;
+int pthread_idNum = 0;
 
 /* The thread control block stores information about a thread. You will
  * need one of this per thread.
@@ -55,11 +55,11 @@ struct thread_control_block {
 	/* Add other information you need to manage this thread */
 	pthread_t t_id;
 	enum thread_status t_status;
-	char *t_stackTail;
+	void *t_stackTail;
 	jmp_buf t_env;
-	struct thread_control_block* t_next;
+	int exit_status;
+	//struct thread_control_block* t_next;
 };
-
 
 static void schedule(int signal)
 {
@@ -69,10 +69,22 @@ static void schedule(int signal)
 	 * 2. Determine which is the next thread that should run
 	 * 3. Switch to the next thread (use longjmp on that thread's jmp_buf)
 	 */
-	if(setjmp()){
-
+	TCB_arr[pthread_self()]->t_status==TS_READY;
+	if(setjmp(TCB_arr[pthread_self()]->t_env)==0){
+		//add logic to check if next thread is ready then jmp to that 
+		while(1){
+			glb_thread_curr++;
+			if(glb_thread_curr==MAX_THREADS){
+				glb_thread_curr=0;
+			}
+			if(TCB_arr[pthread_self()]->t_status==TS_READY){
+				TCB_arr[pthread_self()]->t_status==TS_RUNNING;
+				break;
+			}
+		}
+		longjmp(TCB_arr[pthread_self()]->t_env,1);
 	}
-	longjmp()
+	// Fall through if just longjmp'd, the thread resumes execution
 }
 
 static void scheduler_init()
@@ -93,19 +105,21 @@ static void scheduler_init()
     sigaction(SIGALRM,&alrm_struct,0);
 
 	/* setup main thread */
-	char *main_stack = (char *)malloc(THREAD_STACK_SIZE);
-	main_thread = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
-	main_thread->t_id = MAIN_THREAD_ID;
-	main_thread->t_status = NULL;
-	main_thread->t_stackTail = main_stack;
-	main_thread->t_next = NULL;
+	//jmp_buf main_buf;
+	TCB_arr[MAIN_THREAD_ID] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
+	TCB_arr[MAIN_THREAD_ID]->t_id = MAIN_THREAD_ID;
+	TCB_arr[MAIN_THREAD_ID]->t_status = TS_RUNNING;
+	TCB_arr[MAIN_THREAD_ID]->t_stackTail = NULL;
+	//TCB_arr[MAIN_THREAD_ID]->t_env = main_buf;
+	//TCB_arr[MAIN_THREAD_ID]->t_next = NULL;
 
-	ualarm(SCHEDULER_INTERVAL_USECS,SCHEDULER_INTERVAL_USECS);
+	ualarm(SCHEDULER_INTERVAL_USECS,0);
 }
 
-/* init env for pthread_create */
-void pthread_init(struct thread_control_block* thread,char* stk_ptr){
-
+/* move exit to top of stack for pthread_create */
+void pthread_init(int id){
+	void* stk_exit = TCB_arr[id]->t_stackTail + THREAD_STACK_SIZE - 8;
+	*(unsigned long int *)stk_exit = (unsigned long int)&pthread_exit;
 }
 
 int pthread_create(
@@ -121,12 +135,18 @@ int pthread_create(
 	}
 
 	/* malloc TCB for new thread */
-	struct thread_control_block* n_thread = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
-	char* t_stack = (char *)malloc(THREAD_STACK_SIZE);
-	n_thread->t_stackTail = t_stack;
-	n_thread->t_id = pthread_idNum++;
-	n_thread->t_status = TS_RUNNING;
-	pthread_init(n_thread,);
+	pthread_idNum++;
+	TCB_arr[pthread_idNum] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
+	TCB_arr[pthread_idNum]->t_id = pthread_idNum;
+	TCB_arr[pthread_idNum]->t_stackTail = malloc(THREAD_STACK_SIZE);
+	pthread_init(pthread_idNum);
+	TCB_arr[pthread_idNum]->t_status = TS_READY;
+	// struct thread_control_block* n_thread = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
+	// void* t_stack = malloc(THREAD_STACK_SIZE);
+	// n_thread->t_stackTail = t_stack;
+	// n_thread->t_id = pthread_idNum++;
+	// n_thread->t_status = TS_READY;
+	// pthread_init(n_thread,t_stack);
 	/* TODO: Return 0 on successful thread creation, non-zero for an error.
 	 *       Be sure to set *thread on success.
 	 * Hints:
