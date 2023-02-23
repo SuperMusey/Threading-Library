@@ -57,8 +57,7 @@ struct thread_control_block {
 	enum thread_status t_status;
 	void *t_stackTail;
 	jmp_buf t_env;
-	int exit_status;
-	//struct thread_control_block* t_next;
+	int exit_status;//not necessary, just 0 for assignment
 };
 
 static void schedule(int signal)
@@ -105,21 +104,13 @@ static void scheduler_init()
     sigaction(SIGALRM,&alrm_struct,0);
 
 	/* setup main thread */
-	//jmp_buf main_buf;
+	//No need to do anything with jmpbuf
 	TCB_arr[MAIN_THREAD_ID] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
 	TCB_arr[MAIN_THREAD_ID]->t_id = MAIN_THREAD_ID;
 	TCB_arr[MAIN_THREAD_ID]->t_status = TS_RUNNING;
 	TCB_arr[MAIN_THREAD_ID]->t_stackTail = NULL;
-	//TCB_arr[MAIN_THREAD_ID]->t_env = main_buf;
-	//TCB_arr[MAIN_THREAD_ID]->t_next = NULL;
 
 	ualarm(SCHEDULER_INTERVAL_USECS,0);
-}
-
-/* move exit to top of stack for pthread_create */
-void pthread_init(int id){
-	void* stk_exit = TCB_arr[id]->t_stackTail + THREAD_STACK_SIZE - 8;
-	*(unsigned long int *)stk_exit = (unsigned long int)&pthread_exit;
 }
 
 int pthread_create(
@@ -134,19 +125,38 @@ int pthread_create(
 		scheduler_init();
 	}
 
-	/* malloc TCB for new thread */
-	pthread_idNum++;
+	/* error check pthread ids for exceeding max limit */
+	pthread_idNum++;// 0 (main) to 127 in TCB_arr
+	bool id_found = false;
+	if(pthread_idNum==MAX_THREADS){
+		for(int i = 0;i < MAX_THREADS;i++){
+			if(TCB_arr[i]->t_status == TS_EXITED){
+				pthread_idNum = i;
+				id_found = true;
+				break;
+			}
+		}
+		if(!id_found){
+			/* return 0 on fail */
+			return 0;
+		}
+	}
+	
+	/* malloc TCB for new thread and init values */
 	TCB_arr[pthread_idNum] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
 	TCB_arr[pthread_idNum]->t_id = pthread_idNum;
 	TCB_arr[pthread_idNum]->t_stackTail = malloc(THREAD_STACK_SIZE);
-	pthread_init(pthread_idNum);
+	/* setup stack with pthread_exit */
+	void* stk_exit = TCB_arr[pthread_idNum]->t_stackTail + THREAD_STACK_SIZE - 8;
+	*(unsigned long int *)stk_exit = (unsigned long int)&pthread_exit;
+	/* setup registers */
+	setjmp(TCB_arr[pthread_idNum]->t_env);
+	TCB_arr[pthread_idNum]->t_env->__jmpbuf[JB_R12] = (unsigned long int)start_routine;
+	TCB_arr[pthread_idNum]->t_env->__jmpbuf[JB_R13] = (unsigned long int)arg;
+	TCB_arr[pthread_idNum]->t_env->__jmpbuf[JB_RSP] = ptr_mangle((unsigned long int)stk_exit);
+	TCB_arr[pthread_idNum]->t_env->__jmpbuf[JB_PC] = ptr_mangle((unsigned long int)&start_thunk);
+	*thread = pthread_idNum;
 	TCB_arr[pthread_idNum]->t_status = TS_READY;
-	// struct thread_control_block* n_thread = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
-	// void* t_stack = malloc(THREAD_STACK_SIZE);
-	// n_thread->t_stackTail = t_stack;
-	// n_thread->t_id = pthread_idNum++;
-	// n_thread->t_status = TS_READY;
-	// pthread_init(n_thread,t_stack);
 	/* TODO: Return 0 on successful thread creation, non-zero for an error.
 	 *       Be sure to set *thread on success.
 	 * Hints:

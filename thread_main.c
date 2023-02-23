@@ -6,6 +6,6 @@
 #include <stdio.h>
 
 void main(int argc, char* argv[]){
-    
+    pthread_create();
     return NULL;
 }
