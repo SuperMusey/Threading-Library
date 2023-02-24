@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <unistd.h>
 
 /* You can support more threads. At least support this many. */
 #define MAX_THREADS 128
@@ -109,8 +110,9 @@ static void scheduler_init()
 	TCB_arr[MAIN_THREAD_ID]->t_id = MAIN_THREAD_ID;
 	TCB_arr[MAIN_THREAD_ID]->t_status = TS_RUNNING;
 	TCB_arr[MAIN_THREAD_ID]->t_stackTail = NULL;
+	glb_thread_curr = MAIN_THREAD_ID;
 
-	ualarm(SCHEDULER_INTERVAL_USECS,0);
+	//ualarm(SCHEDULER_INTERVAL_USECS,0);
 }
 
 int pthread_create(
@@ -197,6 +199,7 @@ int pthread_create(
 	 * our case). The address to return to after finishing start_routine
 	 * should be the first thing you push on your stack.
 	 */
+	schedule(0);
 	return -1;
 }
 
