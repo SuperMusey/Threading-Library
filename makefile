@@ -1,16 +1,17 @@
-override CFLAGS := -Wall -Werror -std=gnu99 -O0 -g $(CFLAGS) -I.
+override CFLAGS := -std=gnu99 -O0 -g $(CFLAGS) -I.
 CC = gcc
 
-all: check
+default: tmain
 
-# Build the threads.o file
+# Build the .o file
 threads.o: threads.c ec440threads.h
-
-# build the busy_threads.o file
-busy_threads.o: busy_threads.c ec440threads.h
-
+#busy_threads.o: busy_threads.c ec440threads.h
+thread_main.o: thread_main.c
+				
 # make executable
-test_busy_threads: busy_threads.o threads.o
+#test_busy_threads: busy_threads.o threads.o
+tmain: thread_main.o threads.o
+	 $(CC) -o tmain threads.o thread_main.o
 
 test_files=./test_busy_threads
 

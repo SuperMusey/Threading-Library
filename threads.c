@@ -5,6 +5,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <unistd.h>
+#include <stdio.h>
 
 /* You can support more threads. At least support this many. */
 #define MAX_THREADS 128
@@ -69,20 +70,31 @@ static void schedule(int signal)
 	 * 2. Determine which is the next thread that should run
 	 * 3. Switch to the next thread (use longjmp on that thread's jmp_buf)
 	 */
-	TCB_arr[pthread_self()]->t_status==TS_READY;
-	if(setjmp(TCB_arr[pthread_self()]->t_env)==0){
+	/* Free ALL TS_EXITED threads */
+	for(int i=1;i<MAX_THREADS;i++){
+		if(TCB_arr[pthread_self()]->t_status==TS_EXITED){
+			free(TCB_arr[i]->t_stackTail);
+			free(TCB_arr[i]);
+			TCB_arr[i]=NULL;
+		}
+	}
+	TCB_arr[pthread_self()]->t_status=TS_READY;
+	if(sigsetjmp(TCB_arr[pthread_self()]->t_env,1)==0){
 		//add logic to check if next thread is ready then jmp to that 
 		while(1){
 			glb_thread_curr++;
 			if(glb_thread_curr==MAX_THREADS){
 				glb_thread_curr=0;
 			}
-			if(TCB_arr[pthread_self()]->t_status==TS_READY){
-				TCB_arr[pthread_self()]->t_status==TS_RUNNING;
-				break;
+			if(TCB_arr[pthread_self()]!=NULL){
+				if(TCB_arr[pthread_self()]->t_status==TS_READY){
+					TCB_arr[pthread_self()]->t_status=TS_RUNNING;
+					break;
+				}
 			}
 		}
-		longjmp(TCB_arr[pthread_self()]->t_env,1);
+		ualarm(SCHEDULER_INTERVAL_USECS,0);
+		siglongjmp(TCB_arr[pthread_self()]->t_env,1);
 	}
 	// Fall through if just longjmp'd, the thread resumes execution
 }
@@ -112,7 +124,7 @@ static void scheduler_init()
 	TCB_arr[MAIN_THREAD_ID]->t_stackTail = NULL;
 	glb_thread_curr = MAIN_THREAD_ID;
 
-	//ualarm(SCHEDULER_INTERVAL_USECS,0);
+	ualarm(SCHEDULER_INTERVAL_USECS,0);
 }
 
 int pthread_create(
@@ -131,16 +143,24 @@ int pthread_create(
 	pthread_idNum++;// 0 (main) to 127 in TCB_arr
 	bool id_found = false;
 	if(pthread_idNum==MAX_THREADS){
-		for(int i = 0;i < MAX_THREADS;i++){
-			if(TCB_arr[i]->t_status == TS_EXITED){
+		for(int i = 1;i < MAX_THREADS;i++){
+			/* || will not evaluate second operand when first is true */
+			if(TCB_arr[i]==NULL || TCB_arr[i]->t_status == TS_EXITED){
+				/* free memory from this one exited thread if needed */
+				if(TCB_arr[i]->t_status == TS_EXITED){
+					free(TCB_arr[i]->t_stackTail);
+					free(TCB_arr[i]);
+					TCB_arr[i]=NULL;
+				}
+				/* set the pthread_idNum to replace the exited thread */
 				pthread_idNum = i;
 				id_found = true;
 				break;
 			}
 		}
 		if(!id_found){
-			/* return 0 on fail */
-			return 0;
+			/* return non-zero on fail */
+			return -1;
 		}
 	}
 	
@@ -152,7 +172,7 @@ int pthread_create(
 	void* stk_exit = TCB_arr[pthread_idNum]->t_stackTail + THREAD_STACK_SIZE - 8;
 	*(unsigned long int *)stk_exit = (unsigned long int)&pthread_exit;
 	/* setup registers */
-	setjmp(TCB_arr[pthread_idNum]->t_env);
+	sigsetjmp(TCB_arr[pthread_idNum]->t_env,1);
 	TCB_arr[pthread_idNum]->t_env->__jmpbuf[JB_R12] = (unsigned long int)start_routine;
 	TCB_arr[pthread_idNum]->t_env->__jmpbuf[JB_R13] = (unsigned long int)arg;
 	TCB_arr[pthread_idNum]->t_env->__jmpbuf[JB_RSP] = ptr_mangle((unsigned long int)stk_exit);
@@ -199,8 +219,8 @@ int pthread_create(
 	 * our case). The address to return to after finishing start_routine
 	 * should be the first thing you push on your stack.
 	 */
-	schedule(0);
-	return -1;
+	//schedule(0);
+	return 0;
 }
 
 void pthread_exit(void *value_ptr)
@@ -213,7 +233,7 @@ void pthread_exit(void *value_ptr)
 	 *   can happen.
 	 * - Update the thread's status to indicate that it has exited
 	 */
-	exit(1);
+	TCB_arr[pthread_self()]->t_status = TS_EXITED;
 }
 
 pthread_t pthread_self(void)
