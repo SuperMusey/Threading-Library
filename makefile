@@ -1,15 +1,13 @@
 override CFLAGS := -std=gnu99 -O0 -g $(CFLAGS) -I.
 CC = gcc
 
-default: tmain
-
 # Build the .o file
 threads.o: threads.c ec440threads.h
-#busy_threads.o: busy_threads.c ec440threads.h
+busy_threads.o: busy_threads.c ec440threads.h
 thread_main.o: thread_main.c
 				
 # make executable
-#test_busy_threads: busy_threads.o threads.o
+test_busy_threads: busy_threads.o threads.o
 tmain: thread_main.o threads.o
 	 $(CC) -o tmain threads.o thread_main.o
 
