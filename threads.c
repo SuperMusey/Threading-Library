@@ -70,15 +70,9 @@ static void schedule(int signal)
 	 * 2. Determine which is the next thread that should run
 	 * 3. Switch to the next thread (use longjmp on that thread's jmp_buf)
 	 */
-	/* Free ALL TS_EXITED threads */
-	for(int i=1;i<MAX_THREADS;i++){
-		if(TCB_arr[pthread_self()]->t_status==TS_EXITED){
-			free(TCB_arr[i]->t_stackTail);
-			free(TCB_arr[i]);
-			TCB_arr[i]=NULL;
-		}
+	if(TCB_arr[pthread_self()]->t_status!=TS_EXITED){
+		TCB_arr[pthread_self()]->t_status=TS_READY;
 	}
-	TCB_arr[pthread_self()]->t_status=TS_READY;
 	if(sigsetjmp(TCB_arr[pthread_self()]->t_env,1)==0){
 		//add logic to check if next thread is ready then jmp to that 
 		while(1){
@@ -97,6 +91,14 @@ static void schedule(int signal)
 		siglongjmp(TCB_arr[pthread_self()]->t_env,1);
 	}
 	// Fall through if just longjmp'd, the thread resumes execution
+	/* Free ALL TS_EXITED threads */
+	for(int i=1;i<MAX_THREADS;i++){
+		if(TCB_arr[i]!=NULL&&TCB_arr[i]->t_status==TS_EXITED){
+			free(TCB_arr[i]->t_stackTail);
+			free(TCB_arr[i]);
+			TCB_arr[i]=NULL;
+		}
+	}
 }
 
 static void scheduler_init()
@@ -147,11 +149,11 @@ int pthread_create(
 			/* || will not evaluate second operand when first is true */
 			if(TCB_arr[i]==NULL || TCB_arr[i]->t_status == TS_EXITED){
 				/* free memory from this one exited thread if needed */
-				if(TCB_arr[i]->t_status == TS_EXITED){
-					free(TCB_arr[i]->t_stackTail);
-					free(TCB_arr[i]);
-					TCB_arr[i]=NULL;
-				}
+				// if(TCB_arr[i]->t_status == TS_EXITED){
+				// 	free(TCB_arr[i]->t_stackTail);
+				// 	free(TCB_arr[i]);
+				// 	TCB_arr[i]=NULL;
+				// }
 				/* set the pthread_idNum to replace the exited thread */
 				pthread_idNum = i;
 				id_found = true;
@@ -234,6 +236,9 @@ void pthread_exit(void *value_ptr)
 	 * - Update the thread's status to indicate that it has exited
 	 */
 	TCB_arr[pthread_self()]->t_status = TS_EXITED;
+	ualarm(0,0);
+	schedule(1);
+	exit(1);
 }
 
 pthread_t pthread_self(void)
