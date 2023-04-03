@@ -18,9 +18,9 @@
  */
 typedef struct thread_local_storage{
 	pthread_t tid;
-	unsigned int size;
-	unsigned int page_num;
-	struct page **pages;	
+	unsigned int size;//size in bytes
+	unsigned int page_num;//number of pages
+	struct page **pages;//array of pointers to pages
 } TLS;
 
 struct page{
@@ -40,6 +40,7 @@ struct tls_tid{
 
 struct tls_tid tls_tid_pairs[MAX_THREAD_COUNT];
 int pageSize;
+static int first_create = 1;
 
 /*
  * With global data declared, this is a good point to start defining your
@@ -99,25 +100,115 @@ void tls_init(){
 
 int tls_create(unsigned int size)
 {
+	/*error checks
+	* check if thread has more than 0 bytes storage
+	*/
+	pthread_t tid = pthread_self();
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tid == tid && tls_tid_pairs[i].tls != NULL){
+			if(tls_tid_pairs[i].tls->size>0){
+				return -1;
+			}
+		}
+	}
+	/*on first create
+	*/
+	if(first_create){
+		first_create = 0;
+		tls_init();
+	}
+
+
 	return 0;
 }
 
 int tls_destroy()
 {
+	/*error checks
+	* check if thread does not have LSA
+	*/
+	pthread_t tid = pthread_self();
+	int found_tls = 0;
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tid == tid && tls_tid_pairs[i].tls != NULL){
+			found_tls = 1;
+		}
+	}
+	if(!found_tls){
+		return -1;
+	}
 	return 0;
 }
 
 int tls_read(unsigned int offset, unsigned int length, char *buffer)
 {
+	/*error checks
+	* check if thread does not have LSA
+	* check if we read more data than possible
+	*/
+	pthread_t tid = pthread_self();
+	int found_tls = 0;
+	int tls_tid_indx = -1;
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tid == tid && tls_tid_pairs[i].tls != NULL){
+			found_tls = 1;
+			tls_tid_indx = i;
+		}
+	}
+	if(!found_tls){
+		return -1;
+	}
+	if(tls_tid_pairs[tls_tid_indx].tls->size<offset+length){
+		return -1;
+	}
+
 	return 0;
 }
 
 int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 {
+	/*error checks
+	* check if thread does not have LSA
+	* check if we read more data than possible
+	*/
+	pthread_t tid = pthread_self();
+	int found_tls = 0;
+	int tls_tid_indx = -1;
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tid == tid && tls_tid_pairs[i].tls != NULL){
+			found_tls = 1;
+			tls_tid_indx = i;
+		}
+	}
+	if(!found_tls){
+		return -1;
+	}
+	if(tls_tid_pairs[tls_tid_indx].tls->size<offset+length){
+		return -1;
+	}
+
 	return 0;
 }
 
 int tls_clone(pthread_t tid)
 {
+	/*error checks
+	* check if calling thread has a LSA
+	* or if target has no LSA
+	*/
+	pthread_t ctid = pthread_self();
+	int found_target = 0;
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tid == ctid && tls_tid_pairs[i].tls != NULL){
+			return -1;//calling thread has lsa
+		}
+		if(tls_tid_pairs[i].tid == tid && tls_tid_pairs[i].tls != NULL){
+			found_target = 1;
+		}
+	}
+	if(!found_target){
+		return -1;//target does not have lsa
+	}
+
 	return 0;
 }
