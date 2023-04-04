@@ -1,6 +1,9 @@
 #include "tls.h"
 #include <signal.h>
+#include <stdio.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <stdlib.h>
 
 #define MAX_THREAD_COUNT 128
 
@@ -46,6 +49,33 @@ static int first_create = 1;
  * With global data declared, this is a good point to start defining your
  * static helper functions.
  */
+
+void tls_protect(struct page *p){
+	/*protect the given page from all access
+	*/
+	if(mprotect((void*)&(p->address),pageSize,PROT_NONE)<0){
+		fprintf(stderr, "tls_protect: could not protect page\n");
+		exit(0);
+	}
+}
+
+void tls_read_unprotect(struct page *p){
+	/*unprotect the given page from read
+	*/
+	if(mprotect((void*)&(p->address),pageSize,PROT_READ)<0){
+		fprintf(stderr, "tls_read_unprotect: could not unprotect page\n");
+		exit(0);
+	}
+}
+
+void tls_write_unprotect(struct page *p){
+	/*unprotect the given page from read
+	*/
+	if(mprotect((void*)&(p->address),pageSize,PROT_WRITE)<0){
+		fprintf(stderr, "tls_write_unprotect: could not unprotect page\n");
+		exit(0);
+	}
+}
 
 void tls_handler(int sig, siginfo_t *si, void *context){
 	/*get the page at which the fault occured
@@ -160,6 +190,28 @@ int tls_read(unsigned int offset, unsigned int length, char *buffer)
 	}
 	if(tls_tid_pairs[tls_tid_indx].tls->size<offset+length){
 		return -1;
+	}
+
+	/*unprotect all pages for read
+	*/
+	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
+		tls_read_unprotect(tls_tid_pairs[tid].tls->pages[i]);
+	}
+
+	/*perform read
+	*/
+	int buf_idx=0;
+	int byt_idx=0;
+	for(buf_idx=0,byt_idx=offset;byt_idx<(offset+length);byt_idx++,buf_idx++){
+		int page_number = byt_idx/pageSize;
+		int page_byte_offset = byt_idx%pageSize;
+		buffer[buf_idx] = (char)((tls_tid_pairs[tid].tls->pages[page_number]->address)+page_byte_offset);
+	}
+
+	/*reprotect all pages
+	*/
+	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
+		tls_protect(tls_tid_pairs[tid].tls->pages[i]);
 	}
 
 	return 0;
