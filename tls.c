@@ -20,7 +20,6 @@
  *    E.g., a list of thread IDs and their related TLS structs, or a hash table.
  */
 typedef struct thread_local_storage{
-	pthread_t tid;
 	unsigned int size;//size in bytes
 	unsigned int page_num;//number of pages
 	struct page **pages;//array of pointers to pages
@@ -148,11 +147,38 @@ int tls_create(unsigned int size)
 		tls_init();
 	}
 
+	if(size==0){
+		return -1;
+	}
+
 	/*Allocate TLS using calloc/malloc
 	*/
-	//TLS *tls_made = (TLS*)malloc(sizeof(TLS));
+	int idx_pairs = -1;
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tls==NULL){
+			tls_tid_pairs[i].tls = (TLS*)malloc(sizeof(TLS));
+			tls_tid_pairs[i].tid = tid;
+			idx_pairs = i;
+			break;
+		}
+	}
 
-
+	/*Allocate other stuff in TLS
+	* make size/pageSize(+1) pages
+	*/
+	tls_tid_pairs[idx_pairs].tls->page_num = (size%pageSize==0)?size/pageSize:size/pageSize+1;
+	tls_tid_pairs[idx_pairs].tls->pages = (struct page**)calloc(tls_tid_pairs[idx_pairs].tls->page_num,sizeof(struct page*));
+	for(int i=0;i<tls_tid_pairs[idx_pairs].tls->page_num;i++){
+		tls_tid_pairs[idx_pairs].tls->pages[i] = (struct page*)malloc(sizeof(struct page));
+	}
+	tls_tid_pairs[idx_pairs].tls->size = size;
+	
+	/*Allocate all pages
+	*/
+	for(int i=0;i<tls_tid_pairs[idx_pairs].tls->page_num;i++){
+		tls_tid_pairs[idx_pairs].tls->pages[i]->address = (unsigned long int)mmap(NULL,pageSize*sizeof(char),PROT_NONE,MAP_ANON|MAP_PRIVATE,0,0);
+		tls_tid_pairs[idx_pairs].tls->pages[i]->ref_count=1;
+	}
 
 	return 0;
 }
@@ -261,7 +287,7 @@ int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 		/*COW check in other pages
 		*/
 		if(tls_tid_pairs[tid].tls->pages[page_number]->ref_count>1){
-			
+			// IMPL HERE
 		}
 		*((char*)((void*)(tls_tid_pairs[tid].tls->pages[page_number]->address+page_byte_offset)))=buffer[buf_idx];
 	}
