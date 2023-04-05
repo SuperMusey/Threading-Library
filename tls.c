@@ -250,6 +250,22 @@ int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 		tls_write_unprotect(tls_tid_pairs[tid].tls->pages[i]);
 	}
 
+	/*perform write
+	* if page is shared, COW implementation
+	*/
+	int buf_idx=0;
+	int byt_idx=0;
+	for(buf_idx=0,byt_idx=offset;byt_idx<(offset+length);byt_idx++,buf_idx++){
+		unsigned long int page_number = byt_idx/pageSize;
+		int page_byte_offset = byt_idx%pageSize;
+		/*COW check in other pages
+		*/
+		if(tls_tid_pairs[tid].tls->pages[page_number]->ref_count>1){
+			
+		}
+		*((char*)((void*)(tls_tid_pairs[tid].tls->pages[page_number]->address+page_byte_offset)))=buffer[buf_idx];
+	}
+
 
 	/*reprotect all pages
 	*/
