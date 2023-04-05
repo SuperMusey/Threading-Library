@@ -27,7 +27,7 @@ typedef struct thread_local_storage{
 } TLS;
 
 struct page{
-	unsigned int address;
+	unsigned long int address;
 	int ref_count;
 };
 
@@ -53,7 +53,7 @@ static int first_create = 1;
 void tls_protect(struct page *p){
 	/*protect the given page from all access
 	*/
-	if(mprotect((void*)&(p->address),pageSize,PROT_NONE)<0){
+	if(mprotect((void*)(p->address),pageSize,PROT_NONE)<0){
 		fprintf(stderr, "tls_protect: could not protect page\n");
 		exit(0);
 	}
@@ -62,7 +62,7 @@ void tls_protect(struct page *p){
 void tls_read_unprotect(struct page *p){
 	/*unprotect the given page from read
 	*/
-	if(mprotect((void*)&(p->address),pageSize,PROT_READ)<0){
+	if(mprotect((void*)(p->address),pageSize,PROT_READ)<0){
 		fprintf(stderr, "tls_read_unprotect: could not unprotect page\n");
 		exit(0);
 	}
@@ -71,7 +71,7 @@ void tls_read_unprotect(struct page *p){
 void tls_write_unprotect(struct page *p){
 	/*unprotect the given page from read
 	*/
-	if(mprotect((void*)&(p->address),pageSize,PROT_WRITE)<0){
+	if(mprotect((void*)(p->address),pageSize,PROT_WRITE)<0){
 		fprintf(stderr, "tls_write_unprotect: could not unprotect page\n");
 		exit(0);
 	}
@@ -93,7 +93,7 @@ void tls_handler(int sig, siginfo_t *si, void *context){
 			continue;
 		}
 		for(int i=0;i<tls_tid_pairs[i].tls->page_num;i++){
-			if(((unsigned int)tls_tid_pairs[i].tls->pages[i]->address & ~(pageSize-1))==p_fault_num){
+			if((tls_tid_pairs[i].tls->pages[i]->address & ~(pageSize-1))==p_fault_num){
 				pthread_exit(0);
 			}
 		}
@@ -147,6 +147,11 @@ int tls_create(unsigned int size)
 		first_create = 0;
 		tls_init();
 	}
+
+	/*Allocate TLS using calloc/malloc
+	*/
+	//TLS *tls_made = (TLS*)malloc(sizeof(TLS));
+
 
 
 	return 0;
@@ -203,9 +208,9 @@ int tls_read(unsigned int offset, unsigned int length, char *buffer)
 	int buf_idx=0;
 	int byt_idx=0;
 	for(buf_idx=0,byt_idx=offset;byt_idx<(offset+length);byt_idx++,buf_idx++){
-		int page_number = byt_idx/pageSize;
+		unsigned long int page_number = byt_idx/pageSize;
 		int page_byte_offset = byt_idx%pageSize;
-		buffer[buf_idx] = (char)((tls_tid_pairs[tid].tls->pages[page_number]->address)+page_byte_offset);
+		buffer[buf_idx] = *((char*)((void*)(tls_tid_pairs[tid].tls->pages[page_number]->address+page_byte_offset)));
 	}
 
 	/*reprotect all pages
@@ -237,6 +242,19 @@ int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 	}
 	if(tls_tid_pairs[tls_tid_indx].tls->size<offset+length){
 		return -1;
+	}
+
+	/*unprotect all pages for write
+	*/
+	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
+		tls_write_unprotect(tls_tid_pairs[tid].tls->pages[i]);
+	}
+
+
+	/*reprotect all pages
+	*/
+	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
+		tls_protect(tls_tid_pairs[tid].tls->pages[i]);
 	}
 
 	return 0;
