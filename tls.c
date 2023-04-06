@@ -172,7 +172,7 @@ int tls_create(unsigned int size)
 		tls_tid_pairs[idx_pairs].tls->pages[i] = (struct page*)malloc(sizeof(struct page));
 	}
 	tls_tid_pairs[idx_pairs].tls->size = size;
-	
+
 	/*Allocate all pages
 	*/
 	for(int i=0;i<tls_tid_pairs[idx_pairs].tls->page_num;i++){
@@ -190,14 +190,32 @@ int tls_destroy()
 	*/
 	pthread_t tid = pthread_self();
 	int found_tls = 0;
+	int idx_pairs = -1;
 	for(int i=0;i<MAX_THREAD_COUNT;i++){
 		if(tls_tid_pairs[i].tid == tid && tls_tid_pairs[i].tls != NULL){
+			idx_pairs = i;
 			found_tls = 1;
 		}
 	}
 	if(!found_tls){
 		return -1;
 	}
+
+	/*Free and munmap all pages
+	* free pages array and TLS
+	*/
+	for(int i=0;i<tls_tid_pairs[idx_pairs].tls->page_num;i++){
+		if(tls_tid_pairs[idx_pairs].tls->pages[i]->ref_count==1){
+			munmap((void*)tls_tid_pairs[idx_pairs].tls->pages[i]->address,pageSize);
+		}
+		free(tls_tid_pairs[idx_pairs].tls->pages[i]);
+	}
+	free(tls_tid_pairs[idx_pairs].tls->pages);
+	free(tls_tid_pairs[idx_pairs].tls);
+
+	tls_tid_pairs[idx_pairs].tls=NULL;
+	tls_tid_pairs[idx_pairs].tid = 0;
+
 	return 0;
 }
 
