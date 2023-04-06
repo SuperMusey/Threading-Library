@@ -243,8 +243,8 @@ int tls_read(unsigned int offset, unsigned int length, char *buffer)
 
 	/*unprotect all pages for read
 	*/
-	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
-		tls_read_unprotect(tls_tid_pairs[tid].tls->pages[i]);
+	for(int i=0;i<tls_tid_pairs[tls_tid_indx].tls->page_num;i++){
+		tls_read_unprotect(tls_tid_pairs[tls_tid_indx].tls->pages[i]);
 	}
 
 	/*perform read
@@ -254,13 +254,13 @@ int tls_read(unsigned int offset, unsigned int length, char *buffer)
 	for(buf_idx=0,byt_idx=offset;byt_idx<(offset+length);byt_idx++,buf_idx++){
 		unsigned long int page_number = byt_idx/pageSize;
 		int page_byte_offset = byt_idx%pageSize;
-		buffer[buf_idx] = *((char*)((void*)(tls_tid_pairs[tid].tls->pages[page_number]->address+page_byte_offset)));
+		buffer[buf_idx] = *((char*)((void*)(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->address+page_byte_offset)));
 	}
 
 	/*reprotect all pages
 	*/
-	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
-		tls_protect(tls_tid_pairs[tid].tls->pages[i]);
+	for(int i=0;i<tls_tid_pairs[tls_tid_indx].tls->page_num;i++){
+		tls_protect(tls_tid_pairs[tls_tid_indx].tls->pages[i]);
 	}
 
 	return 0;
@@ -290,8 +290,8 @@ int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 
 	/*unprotect all pages for write
 	*/
-	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
-		tls_write_unprotect(tls_tid_pairs[tid].tls->pages[i]);
+	for(int i=0;i<tls_tid_pairs[tls_tid_indx].tls->page_num;i++){
+		tls_write_unprotect(tls_tid_pairs[tls_tid_indx].tls->pages[i]);
 	}
 
 	/*perform write
@@ -304,17 +304,18 @@ int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 		int page_byte_offset = byt_idx%pageSize;
 		/*COW check in other pages
 		*/
-		if(tls_tid_pairs[tid].tls->pages[page_number]->ref_count>1){
+		if(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->ref_count>1){
 			// IMPL HERE
+			printf("COW error\n");
 		}
-		*((char*)((void*)(tls_tid_pairs[tid].tls->pages[page_number]->address+page_byte_offset)))=buffer[buf_idx];
+		*((char*)((void*)(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->address+page_byte_offset)))=buffer[buf_idx];
 	}
 
 
 	/*reprotect all pages
 	*/
-	for(int i=0;i<tls_tid_pairs[tid].tls->page_num;i++){
-		tls_protect(tls_tid_pairs[tid].tls->pages[i]);
+	for(int i=0;i<tls_tid_pairs[tls_tid_indx].tls->page_num;i++){
+		tls_protect(tls_tid_pairs[tls_tid_indx].tls->pages[i]);
 	}
 
 	return 0;
