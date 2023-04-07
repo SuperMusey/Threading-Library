@@ -207,8 +207,10 @@ int tls_destroy()
 	for(int i=0;i<tls_tid_pairs[idx_pairs].tls->page_num;i++){
 		if(tls_tid_pairs[idx_pairs].tls->pages[i]->ref_count==1){
 			munmap((void*)tls_tid_pairs[idx_pairs].tls->pages[i]->address,pageSize);
+			free(tls_tid_pairs[idx_pairs].tls->pages[i]);
 		}
-		free(tls_tid_pairs[idx_pairs].tls->pages[i]);
+		else
+			tls_tid_pairs[idx_pairs].tls->pages[i]->ref_count--;
 	}
 	free(tls_tid_pairs[idx_pairs].tls->pages);
 	free(tls_tid_pairs[idx_pairs].tls);
@@ -339,6 +341,43 @@ int tls_clone(pthread_t tid)
 	}
 	if(!found_target){
 		return -1;//target does not have lsa
+	}
+
+	/* clone target into current
+	*/
+
+	/*find TLS index of target
+	*/
+	int target_idx_pairs = -1;
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tid==tid){
+			target_idx_pairs = i;
+			break;
+		}
+	}
+
+	/*Allocate memory for clone(current) TLS
+	*/
+	TLS *clone_tld = (TLS*)malloc(sizeof(TLS));
+	clone_tld->size = tls_tid_pairs[target_idx_pairs].tls->size;
+	clone_tld->page_num =  tls_tid_pairs[target_idx_pairs].tls->page_num;
+	clone_tld->pages = (struct page**)calloc(clone_tld->page_num,sizeof(struct page*));
+
+	
+	/*clone pages, not data
+	*increment refernce count
+	*/
+	for(int i=0;i<clone_tld->page_num;i++){
+		++tls_tid_pairs[target_idx_pairs].tls->pages[i]->ref_count;
+		clone_tld->pages[i] = tls_tid_pairs[target_idx_pairs].tls->pages[i];
+	}
+
+	for(int i=0;i<MAX_THREAD_COUNT;i++){
+		if(tls_tid_pairs[i].tls==NULL){
+			tls_tid_pairs[i].tls = clone_tld;
+			tls_tid_pairs[i].tid = ctid;
+			break;
+		}
 	}
 
 	return 0;
