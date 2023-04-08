@@ -307,8 +307,15 @@ int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 		/*COW check in other pages
 		*/
 		if(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->ref_count>1){
-			// IMPL HERE
-			printf("COW error\n");
+			/* create private cope of page for write
+			* mmap new address of pageSize
+			* update TLS page pointer to new pointer
+			*/
+			tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->ref_count--;
+			tls_protect(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]);
+			tls_tid_pairs[tls_tid_indx].tls->pages[page_number] = (struct page*)malloc(sizeof(struct page));
+			tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->address = (unsigned long int)mmap(0,pageSize,PROT_WRITE,MAP_ANON|MAP_PRIVATE,0,0);
+			tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->ref_count = 1;
 		}
 		*((char*)((void*)(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->address+page_byte_offset)))=buffer[buf_idx];
 	}
@@ -365,7 +372,7 @@ int tls_clone(pthread_t tid)
 
 	
 	/*clone pages, not data
-	*increment refernce count
+	*increment reference count
 	*/
 	for(int i=0;i<clone_tld->page_num;i++){
 		++tls_tid_pairs[target_idx_pairs].tls->pages[i]->ref_count;
