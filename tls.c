@@ -82,7 +82,7 @@ void tls_handler(int sig, siginfo_t *si, void *context){
 	* by ANDing with 0's of pagesize bits to get the top half 
 	* of the address which is the page number
 	*/
-	unsigned int p_fault_num = *((unsigned int*)si->si_addr) & ~(pageSize-1);
+	unsigned long int p_fault_num = ((unsigned long int)si->si_addr) & ~(pageSize-1);
 
 	/*check if segfault was cause by thread
 	* touching forbidden memory
