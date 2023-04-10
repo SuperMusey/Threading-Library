@@ -308,14 +308,20 @@ int tls_write(unsigned int offset, unsigned int length, const char *buffer)
 		*/
 		if(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->ref_count>1){
 			/* create private cope of page for write
+			* copy existing data into copy
 			* mmap new address of pageSize
 			* update TLS page pointer to new pointer
 			*/
 			tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->ref_count--;
+			struct page* pg_copy = (struct page*)malloc(sizeof(struct page));
+			pg_copy->address = (unsigned long int)mmap(0,pageSize,PROT_WRITE,MAP_ANON|MAP_PRIVATE,0,0);
+			pg_copy->ref_count = 1;
+			tls_read_unprotect(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]);
+			for(int i=0;i<pageSize;i++){
+				((char*)pg_copy->address)[i] = ((char*)tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->address)[i];
+			}
 			tls_protect(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]);
-			tls_tid_pairs[tls_tid_indx].tls->pages[page_number] = (struct page*)malloc(sizeof(struct page));
-			tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->address = (unsigned long int)mmap(0,pageSize,PROT_WRITE,MAP_ANON|MAP_PRIVATE,0,0);
-			tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->ref_count = 1;
+			tls_tid_pairs[tls_tid_indx].tls->pages[page_number] = pg_copy;
 		}
 		*((char*)((void*)(tls_tid_pairs[tls_tid_indx].tls->pages[page_number]->address+page_byte_offset)))=buffer[buf_idx];
 	}
