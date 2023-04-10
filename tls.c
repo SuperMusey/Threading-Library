@@ -76,7 +76,7 @@ void tls_write_unprotect(struct page *p){
 	}
 }
 
-void tls_handler(int sig, siginfo_t *si, void *context){
+void tls_handle_page_fault(int sig, siginfo_t *si, void *context){
 	/*get the page at which the fault occured
 	* binary arithmetic remove the page offset from the address
 	* by ANDing with 0's of pagesize bits to get the top half 
@@ -88,9 +88,6 @@ void tls_handler(int sig, siginfo_t *si, void *context){
 	* touching forbidden memory
 	*/
 	for(int i=0;i<MAX_THREAD_COUNT;i++){
-		if(tls_tid_pairs[i].tid == pthread_self()){
-			continue;
-		}
 		if(tls_tid_pairs[i].tls != NULL){
 			for(int i=0;i<tls_tid_pairs[i].tls->page_num;i++){
 				unsigned long int c_pg = tls_tid_pairs[i].tls->pages[i]->address & ~(pageSize-1);
@@ -121,7 +118,7 @@ void tls_init(){
 	* SIGSEGV, SIGBUS
 	*/
 	sigact.sa_flags = SA_SIGINFO;
-	sigact.sa_sigaction = tls_handler;
+	sigact.sa_sigaction = tls_handle_page_fault;
 	sigaction(SIGBUS,&sigact,NULL);
 	sigaction(SIGSEGV,&sigact,NULL);
 } 
@@ -146,8 +143,8 @@ int tls_create(unsigned int size)
 	/*on first create
 	*/
 	if(first_create){
-		first_create = 0;
 		tls_init();
+		first_create = 0;
 	}
 
 	if(size==0){
