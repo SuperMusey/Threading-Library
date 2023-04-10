@@ -89,11 +89,11 @@ void tls_handler(int sig, siginfo_t *si, void *context){
 	*/
 	for(int i=0;i<MAX_THREAD_COUNT;i++){
 		if(tls_tid_pairs[i].tid == pthread_self() || tls_tid_pairs[i].tls == NULL){
-			continue;
+			break;
 		}
 		for(int i=0;i<tls_tid_pairs[i].tls->page_num;i++){
 			if((tls_tid_pairs[i].tls->pages[i]->address & ~(pageSize-1))==p_fault_num){
-				pthread_exit(0);
+				pthread_exit(NULL);
 			}
 		}
 	}
