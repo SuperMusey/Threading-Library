@@ -19,6 +19,9 @@
  *  - Some kind of data structure to help find a TLS, searching by thread ID.
  *    E.g., a list of thread IDs and their related TLS structs, or a hash table.
  */
+
+pthread_mutex_t mtx;
+
 typedef struct thread_local_storage{
 	unsigned int size;//size in bytes
 	unsigned int page_num;//number of pages
@@ -121,6 +124,7 @@ void tls_init(){
 	sigact.sa_sigaction = tls_handle_page_fault;
 	sigaction(SIGBUS,&sigact,NULL);
 	sigaction(SIGSEGV,&sigact,NULL);
+	pthread_mutex_init(&mtx,NULL);
 } 
 
 /*
@@ -243,6 +247,7 @@ int tls_read(unsigned int offset, unsigned int length, char *buffer)
 		return -1;
 	}
 
+	pthread_mutex_lock(&mtx);
 	/*unprotect all pages for read
 	*/
 	for(int i=0;i<tls_tid_pairs[tls_tid_indx].tls->page_num;i++){
@@ -264,7 +269,7 @@ int tls_read(unsigned int offset, unsigned int length, char *buffer)
 	for(int i=0;i<tls_tid_pairs[tls_tid_indx].tls->page_num;i++){
 		tls_protect(tls_tid_pairs[tls_tid_indx].tls->pages[i]);
 	}
-
+	pthread_mutex_unlock(&mtx);
 	return 0;
 }
 
