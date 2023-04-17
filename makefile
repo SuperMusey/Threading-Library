@@ -8,8 +8,8 @@ thread_main.o: thread_main.c
 				
 # make executable
 test_busy_threads: busy_threads.o threads.o
-tmain: thread_main.o threads.o
-	 $(CC) -o tmain threads.o thread_main.o
+tmain: thread_main.c threads.o
+	 $(CC) -o tmain threads.o thread_main.c
 
 test_files=./test_busy_threads
 
@@ -23,4 +23,4 @@ check: checkprogs
 	tests/run_tests.sh $(test_files)
 
 clean:
-	rm -f *.o $(test_files) $(test_o_files)
+	rm -f *.o $(test_files) $(test_o_files) tmain

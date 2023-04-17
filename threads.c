@@ -36,7 +36,8 @@ enum thread_status
 {
 	TS_EXITED,
 	TS_RUNNING,
-	TS_READY
+	TS_READY,
+	TS_BLOCKED
 };
 
 /* array of TCBS (no need to delete exited thread) */
@@ -45,6 +46,8 @@ struct thread_control_block* TCB_arr[MAX_THREADS];
 pthread_t glb_thread_curr = -1;
 /* count thread id */
 int pthread_idNum = 0;
+
+
 
 /* The thread control block stores information about a thread. You will
  * need one of this per thread.
@@ -128,6 +131,65 @@ static void scheduler_init()
 
 	ualarm(SCHEDULER_INTERVAL_USECS,0);
 }
+
+//disable signals so that the thread can run in Critical section
+static void lock(){
+	if(sigprocmask(SIG_BLOCK,NULL,NULL)!=0){
+		perror("lock: sigprocmask failure");
+	}
+}
+
+//enable signals so that the thread can run after Critical section
+static void unlock(){
+	if(sigprocmask(SIG_UNBLOCK,NULL,NULL)!=0){
+		perror("unlock: sigprocmask failure");
+	}
+}
+
+//initialize a given mutex
+int pthread_mutex_init(pthread_mutex_t *restrict mutex,const pthread_mutexattr_t *restrict attr){
+	mutex->__data.__lock = 0;
+	return 0;
+}
+
+/*destroy given mutex
+* check if lock is greater than 0 before use
+*/
+int pthread_mutex_destroy(pthread_mutex_t *mutex){
+	mutex->__data.__lock = -1;
+	return 0;
+}
+
+int pthread_mutex_lock(pthread_mutex_t *mutex){
+	//lock for mutex lock and check if lock not aquired
+	lock();
+	if(mutex->__data.__lock==1){
+		//if lock not available (lock=1)
+		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
+		unlock();
+		//scheduler only runs ready threads
+		schedule(1);
+	}
+	//if lock can be aquired
+	//lock again incase a thread falls back here after schedule (after it goes from BLOCK to READY)
+	lock();
+	mutex->__data.__lock=1;
+	return 0;
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *mutex){
+	//thread should be locked before executing unlock
+	mutex->__data.__lock=0;
+	for(int i=0;i<MAX_THREADS;i++){
+		if(TCB_arr[i]->t_status==TS_BLOCKED){
+			TCB_arr[i]->t_status=TS_READY;
+		}
+	}
+	unlock();
+	return 0;
+}
+
+
 
 int pthread_create(
 	pthread_t *thread, const pthread_attr_t *attr,
