@@ -38,6 +38,6 @@ void main(int argc, char* argv[]){
 	pthread_mutex_init(&mutex,NULL);
     pthread_create(&threads[0],NULL,count,(void *)(intptr_t)(2*MAX_COUNTER));
     pthread_create(&threads[1],NULL,count,(void *)(intptr_t)(2*MAX_COUNTER));
-    count_unlock((void *)(intptr_t)((4) * MAX_COUNTER));
+    count_unlock((void *)(intptr_t)((3) * MAX_COUNTER));
     return;
 }

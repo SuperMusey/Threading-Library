@@ -75,9 +75,10 @@ static void schedule(int signal)
 	 * 2. Determine which is the next thread that should run
 	 * 3. Switch to the next thread (use longjmp on that thread's jmp_buf)
 	 */
-
-	if(TCB_arr[pthread_self()]->t_status!=TS_EXITED){
-		TCB_arr[pthread_self()]->t_status=TS_READY;
+	if(TCB_arr[pthread_self()]->t_status!=TS_BLOCKED){
+		if(TCB_arr[pthread_self()]->t_status!=TS_EXITED){
+			TCB_arr[pthread_self()]->t_status=TS_READY;
+		}
 	}
 	if(sigsetjmp(TCB_arr[pthread_self()]->t_env,1)==0){
 		//add logic to check if next thread is ready then jmp to that 
