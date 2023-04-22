@@ -9,7 +9,7 @@ thread_main.o: thread_main.c
 # make executable
 test_busy_threads: busy_threads.o threads.o
 tmain: thread_main.c threads.o
-	 $(CC) -o tmain threads.o thread_main.c
+	 $(CC) -o tmain -g threads.o thread_main.c
 
 test_files=./test_busy_threads
 

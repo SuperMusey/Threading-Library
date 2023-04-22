@@ -46,6 +46,8 @@ struct thread_control_block* TCB_arr[MAX_THREADS];
 pthread_t glb_thread_curr = -1;
 /* count thread id */
 int pthread_idNum = 0;
+/*signal sets*/
+sigset_t new_set, old_set;
 
 
 
@@ -73,6 +75,7 @@ static void schedule(int signal)
 	 * 2. Determine which is the next thread that should run
 	 * 3. Switch to the next thread (use longjmp on that thread's jmp_buf)
 	 */
+
 	if(TCB_arr[pthread_self()]->t_status!=TS_EXITED){
 		TCB_arr[pthread_self()]->t_status=TS_READY;
 	}
@@ -121,6 +124,11 @@ static void scheduler_init()
     alrm_struct.sa_handler = schedule;
     sigaction(SIGALRM,&alrm_struct,0);
 
+	/*setup new and old sets*/
+	sigemptyset(&new_set);
+	sigemptyset(&old_set);
+    sigaddset(&new_set, SIGALRM);
+
 	/* setup main thread */
 	//No need to do anything with jmpbuf
 	TCB_arr[MAIN_THREAD_ID] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
@@ -134,14 +142,14 @@ static void scheduler_init()
 
 //disable signals so that the thread can run in Critical section
 static void lock(){
-	if(sigprocmask(SIG_BLOCK,NULL,NULL)!=0){
+	if(sigprocmask(SIG_BLOCK,&new_set, &old_set)!=0){
 		perror("lock: sigprocmask failure");
 	}
 }
 
 //enable signals so that the thread can run after Critical section
 static void unlock(){
-	if(sigprocmask(SIG_UNBLOCK,NULL,NULL)!=0){
+	if(sigprocmask(SIG_SETMASK, &old_set,NULL)!=0){
 		perror("unlock: sigprocmask failure");
 	}
 }
@@ -171,25 +179,25 @@ int pthread_mutex_lock(pthread_mutex_t *mutex){
 		schedule(1);
 	}
 	//if lock can be aquired
-	//lock again incase a thread falls back here after schedule (after it goes from BLOCK to READY)
-	lock();
 	mutex->__data.__lock=1;
+	unlock();
 	return 0;
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex){
 	//thread should be locked before executing unlock
+	lock();
 	mutex->__data.__lock=0;
 	for(int i=0;i<MAX_THREADS;i++){
-		if(TCB_arr[i]->t_status==TS_BLOCKED){
-			TCB_arr[i]->t_status=TS_READY;
+		if(TCB_arr[i]!=NULL){
+			if(TCB_arr[i]->t_status==TS_BLOCKED){
+				TCB_arr[i]->t_status=TS_READY;
+			}
 		}
 	}
 	unlock();
 	return 0;
 }
-
-
 
 int pthread_create(
 	pthread_t *thread, const pthread_attr_t *attr,
