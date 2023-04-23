@@ -6,6 +6,8 @@
 #include <signal.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <string.h>
+#include <errno.h>
 
 /* You can support more threads. At least support this many. */
 #define MAX_THREADS 128
@@ -66,6 +68,16 @@ struct thread_control_block {
 	jmp_buf t_env;
 	int exit_status;//not necessary, just 0 for assignment
 };
+
+/* Barrier Union */
+union barrier_t{
+	struct{
+		int count;
+		int current_count;
+	};
+	pthread_barrier_t barrier;
+};
+
 
 static void schedule(int signal)
 {
@@ -171,8 +183,11 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex){
 
 int pthread_mutex_lock(pthread_mutex_t *mutex){
 	//lock for mutex lock and check if lock not aquired
+	if(mutex->__data.__lock == -1){
+		return -1;
+	}
 	lock();
-	if(mutex->__data.__lock==1){
+	while(mutex->__data.__lock==1){
 		//if lock not available (lock=1)
 		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
 		unlock();
@@ -187,6 +202,9 @@ int pthread_mutex_lock(pthread_mutex_t *mutex){
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex){
 	//thread should be locked before executing unlock
+	if(mutex->__data.__lock == -1){
+		return -1;
+	}
 	lock();
 	mutex->__data.__lock=0;
 	for(int i=0;i<MAX_THREADS;i++){
@@ -195,6 +213,59 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex){
 				TCB_arr[i]->t_status=TS_READY;
 			}
 		}
+	}
+	unlock();
+	return 0;
+}
+
+//initualize the barrier
+int pthread_barrier_init(pthread_barrier_t *restrict barrier,const pthread_barrierattr_t *restrict attr,unsigned count){
+	if(count<=0){
+		return EINVAL;
+	}
+	union barrier_t barr_union;
+	barr_union.count = count;
+	barr_union.current_count = 0;
+	memcpy(barrier,&barr_union,sizeof(barrier));
+	return 0;
+}
+
+//destroy the barrier
+int pthread_barrier_destroy(pthread_barrier_t *barrier){
+	union barrier_t barr_union;
+	barr_union.count = -1;
+	barr_union.current_count = -1;
+	memcpy(barrier,&barr_union,sizeof(barrier));
+	return 0;
+}
+
+//Use the barrier and wait
+int pthread_barrier_wait(pthread_barrier_t *barrier){
+	lock();
+	union barrier_t barr_union;
+	memcpy(&barr_union,barrier,sizeof(barrier));
+	//if not reached the no. of threads needed to unblock
+	barr_union.current_count++;
+	while(barr_union.current_count<barr_union.count){
+		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
+		memcpy(barrier,&barr_union,sizeof(barrier));
+		unlock();
+		schedule(1);
+	}
+	if(barr_union.current_count==barr_union.count){
+		//increment to denote that this is first thread to be released
+		barr_union.current_count++;
+		memcpy(barrier,&barr_union,sizeof(barrier));
+		//unblock when threads fall here
+		for(int i=0;i<MAX_THREADS;i++){
+			if(TCB_arr[i]!=NULL){
+				if(TCB_arr[i]->t_status==TS_BLOCKED){
+					TCB_arr[i]->t_status=TS_READY;
+				}
+			}
+		}
+		unlock();
+		return PTHREAD_BARRIER_SERIAL_THREAD;
 	}
 	unlock();
 	return 0;
