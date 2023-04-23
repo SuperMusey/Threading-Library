@@ -186,11 +186,11 @@ int pthread_mutex_init(pthread_mutex_t *restrict mutex,const pthread_mutexattr_t
 	mutex_union.current_count = 0;
 	mutex_union.lock = 0;
 	mutex_union.mutex_blocked_arr = (pthread_t*)malloc(MAX_THREADS*sizeof(pthread_t));
-	for(int i=0;i<MAX_THREADS;i++){
-		mutex_union.mutex_blocked_arr[i] = ERROR_THREAD_ID;
-	}
-	//memset(mutex_union.mutex_blocked_arr,ERROR_THREAD_ID,sizeof(mutex_union.mutex_blocked_arr));
-	memcpy(mutex,&mutex_union,sizeof(mutex));
+	// for(int i=0;i<MAX_THREADS;i++){
+	// 	mutex_union.mutex_blocked_arr[i] = ERROR_THREAD_ID;
+	// }
+	memset(mutex_union.mutex_blocked_arr,ERROR_THREAD_ID,sizeof(mutex_union.mutex_blocked_arr));
+	memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
 	return 0;
 }
 
@@ -199,7 +199,7 @@ int pthread_mutex_init(pthread_mutex_t *restrict mutex,const pthread_mutexattr_t
 */
 int pthread_mutex_destroy(pthread_mutex_t *mutex){
 	union mutex_t mutex_union;
-	memcpy(&mutex_union,mutex,sizeof(mutex));
+	memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
 	mutex_union.current_count = -1;
 	mutex_union.lock = -1;
 	free(mutex_union.mutex_blocked_arr);
@@ -208,7 +208,7 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex){
 
 int pthread_mutex_lock(pthread_mutex_t *mutex){
 	union mutex_t mutex_union;
-	memcpy(&mutex_union,mutex,sizeof(mutex));
+	memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
 	//lock for mutex lock and check if lock not aquired
 	if(mutex_union.lock == -1){
 		return -1;
@@ -221,21 +221,21 @@ int pthread_mutex_lock(pthread_mutex_t *mutex){
 	while(mutex_union.lock==1){
 		//if lock not available (lock=1)
 		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
-		memcpy(mutex,&mutex_union,sizeof(mutex));
+		memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
 		unlock();
 		//scheduler only runs ready threads
 		schedule(1);
 	}
 	//if lock can be aquired
 	mutex_union.lock=1;
-	memcpy(mutex,&mutex_union,sizeof(mutex));
+	memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
 	unlock();
 	return 0;
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex){
 	union mutex_t mutex_union;
-	memcpy(&mutex_union,mutex,sizeof(mutex));
+	memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
 	//thread should be locked before executing unlock
 	if(mutex_union.lock == -1){
 		return -1;
@@ -249,7 +249,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex){
 			}
 		}
 	}
-	memcpy(mutex,&mutex_union,sizeof(mutex));
+	memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
 	unlock();
 	return 0;
 }
@@ -264,7 +264,7 @@ int pthread_barrier_init(pthread_barrier_t *restrict barrier,const pthread_barri
 	barr_union.current_count = 0;
 	barr_union.barrier_blocked_arr = (pthread_t*)malloc(count*sizeof(pthread_t));
 	memset(barr_union.barrier_blocked_arr,ERROR_THREAD_ID,sizeof(barr_union.barrier_blocked_arr));
-	memcpy(barrier,&barr_union,sizeof(barrier));
+	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 	return 0;
 }
 
@@ -274,7 +274,7 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier){
 	barr_union.count = -1;
 	barr_union.current_count = -1;
 	free(barr_union.barrier_blocked_arr);
-	memcpy(barrier,&barr_union,sizeof(barrier));
+	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 	return 0;
 }
 
@@ -282,20 +282,20 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier){
 int pthread_barrier_wait(pthread_barrier_t *barrier){
 	lock();
 	union barrier_t barr_union;
-	memcpy(&barr_union,barrier,sizeof(barrier));
+	memcpy(&barr_union,barrier,sizeof(pthread_barrier_t));
 	//if not reached the no. of threads needed to unblock
 	barr_union.current_count++;
 	while(barr_union.current_count<barr_union.count){
 		barr_union.barrier_blocked_arr[barr_union.current_count-1] = pthread_self();
 		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
-		memcpy(barrier,&barr_union,sizeof(barrier));
+		memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 		unlock();
 		schedule(1);
 	}
 	if(barr_union.current_count==barr_union.count){
 		//increment to denote that this is first thread to be released
 		barr_union.current_count++;
-		memcpy(barrier,&barr_union,sizeof(barrier));
+		memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 		//unblock barrier threads when threads fall here
 		for(int i=0;i<barr_union.count;i++){
 			if(TCB_arr[barr_union.barrier_blocked_arr[i]]!=NULL){
