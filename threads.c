@@ -69,6 +69,7 @@ struct thread_control_block {
 	void *t_stackTail;
 	jmp_buf t_env;
 	int exit_status;//not necessary, just 0 for assignment
+	void* block;
 };
 
 /* Barrier Union */
@@ -182,15 +183,16 @@ static void unlock(){
 
 //initialize a given mutex
 int pthread_mutex_init(pthread_mutex_t *restrict mutex,const pthread_mutexattr_t *restrict attr){
-	union mutex_t mutex_union;
-	mutex_union.current_count = 0;
-	mutex_union.lock = 0;
-	mutex_union.mutex_blocked_arr = (pthread_t*)malloc(MAX_THREADS*sizeof(pthread_t));
+	// union mutex_t mutex_union;
+	// mutex_union.current_count = 0;
+	// mutex_union.lock = 0;
+	// mutex_union.mutex_blocked_arr = (pthread_t*)malloc(MAX_THREADS*sizeof(pthread_t));
 	// for(int i=0;i<MAX_THREADS;i++){
 	// 	mutex_union.mutex_blocked_arr[i] = ERROR_THREAD_ID;
 	// }
-	memset(mutex_union.mutex_blocked_arr,ERROR_THREAD_ID,sizeof(mutex_union.mutex_blocked_arr));
-	memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
+	//memset(mutex_union.mutex_blocked_arr,ERROR_THREAD_ID,sizeof(mutex_union.mutex_blocked_arr));
+	//memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
+	mutex->__data.__lock = 0;
 	return 0;
 }
 
@@ -198,58 +200,61 @@ int pthread_mutex_init(pthread_mutex_t *restrict mutex,const pthread_mutexattr_t
 * check if lock is greater than 0 before use
 */
 int pthread_mutex_destroy(pthread_mutex_t *mutex){
-	union mutex_t mutex_union;
-	memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
-	mutex_union.current_count = -1;
-	mutex_union.lock = -1;
-	free(mutex_union.mutex_blocked_arr);
+	// union mutex_t mutex_union;
+	// memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
+	// mutex_union.current_count = -1;
+	// mutex_union.lock = -1;
+	// free(mutex_union.mutex_blocked_arr);
+	mutex->__data.__lock = -1;
 	return 0;
 }
 
 int pthread_mutex_lock(pthread_mutex_t *mutex){
-	union mutex_t mutex_union;
-	memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
+	// union mutex_t mutex_union;
+	// memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
 	//lock for mutex lock and check if lock not aquired
-	if(mutex_union.lock == -1){
+	if(mutex->__data.__lock == -1){
 		return -1;
 	}
 	lock();
-	if(mutex_union.lock==1){
-		mutex_union.mutex_blocked_arr[mutex_union.current_count] = pthread_self();
-		mutex_union.current_count++;
-	}
-	while(mutex_union.lock==1){
-		//if lock not available (lock=1)
+	if(mutex->__data.__lock==1){
 		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
-		memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
+		TCB_arr[pthread_self()]->block = mutex;
+	}
+	//while lock cannot be aquired
+	while(mutex->__data.__lock==1){
+		//if lock not available (lock=1)
+		//memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
 		unlock();
 		//scheduler only runs ready threads
 		schedule(1);
+		lock();
 	}
 	//if lock can be aquired
-	mutex_union.lock=1;
-	memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
+	mutex->__data.__lock=1;
+	//memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
 	unlock();
 	return 0;
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex){
-	union mutex_t mutex_union;
-	memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
+	//union mutex_t mutex_union;
+	//memcpy(&mutex_union,mutex,sizeof(pthread_mutex_t));
 	//thread should be locked before executing unlock
-	if(mutex_union.lock == -1){
+	if(mutex->__data.__lock == -1){
 		return -1;
 	}
 	lock();
-	mutex_union.lock=0;
+	mutex->__data.__lock=0;
 	for(int i=0;i<MAX_THREADS;i++){
-		if(mutex_union.mutex_blocked_arr[i]!=ERROR_THREAD_ID&&TCB_arr[mutex_union.mutex_blocked_arr[i]]!=NULL){
-			if(TCB_arr[mutex_union.mutex_blocked_arr[i]]->t_status==TS_BLOCKED){
-				TCB_arr[mutex_union.mutex_blocked_arr[i]]->t_status=TS_READY;
+		if(TCB_arr[i]!=NULL&&TCB_arr[i]->block==mutex){
+			if(TCB_arr[i]->t_status==TS_BLOCKED){
+				TCB_arr[i]->t_status=TS_READY;
+				TCB_arr[i]->block = NULL;
 			}
 		}
 	}
-	memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
+	//memcpy(mutex,&mutex_union,sizeof(pthread_mutex_t));
 	unlock();
 	return 0;
 }
@@ -352,6 +357,7 @@ int pthread_create(
 	TCB_arr[pthread_idNum] = (struct thread_control_block*)malloc(sizeof(struct thread_control_block));
 	TCB_arr[pthread_idNum]->t_id = pthread_idNum;
 	TCB_arr[pthread_idNum]->t_stackTail = malloc(THREAD_STACK_SIZE);
+	TCB_arr[pthread_idNum]->block = NULL;
 	/* setup stack with pthread_exit */
 	void* stk_exit = TCB_arr[pthread_idNum]->t_stackTail + THREAD_STACK_SIZE - 8;
 	*(unsigned long int *)stk_exit = (unsigned long int)&pthread_exit;
