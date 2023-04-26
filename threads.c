@@ -267,18 +267,8 @@ int pthread_barrier_init(pthread_barrier_t *restrict barrier,const pthread_barri
 	union barrier_t barr_union;
 	barr_union.count = count;
 	barr_union.current_count = 0;
-	barr_union.barrier_blocked_arr = (pthread_t*)malloc(count*sizeof(pthread_t));
-	memset(barr_union.barrier_blocked_arr,ERROR_THREAD_ID,sizeof(barr_union.barrier_blocked_arr));
-	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
-	return 0;
-}
-
-//destroy the barrier
-int pthread_barrier_destroy(pthread_barrier_t *barrier){
-	union barrier_t barr_union;
-	barr_union.count = -1;
-	barr_union.current_count = -1;
-	free(barr_union.barrier_blocked_arr);
+	//barr_union.barrier_blocked_arr = (pthread_t*)malloc(count*sizeof(pthread_t));
+	//memset(barr_union.barrier_blocked_arr,ERROR_THREAD_ID,sizeof(barr_union.barrier_blocked_arr));
 	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 	return 0;
 }
@@ -291,21 +281,25 @@ int pthread_barrier_wait(pthread_barrier_t *barrier){
 	//if not reached the no. of threads needed to unblock
 	barr_union.current_count++;
 	while(barr_union.current_count<barr_union.count){
-		barr_union.barrier_blocked_arr[barr_union.current_count-1] = pthread_self();
-		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
+		//barr_union.barrier_blocked_arr[barr_union.current_count-1] = pthread_self();
 		memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
+		TCB_arr[pthread_self()]->t_status = TS_BLOCKED;
+		TCB_arr[pthread_self()]->block = barrier;
 		unlock();
 		schedule(1);
+		memcpy(&barr_union,barrier,sizeof(pthread_barrier_t));
+		lock();
 	}
 	if(barr_union.current_count==barr_union.count){
-		//increment to denote that this is first thread to be released
+		//set to count+1 to denote that this is first thread to be released
 		barr_union.current_count++;
 		memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 		//unblock barrier threads when threads fall here
-		for(int i=0;i<barr_union.count;i++){
-			if(TCB_arr[barr_union.barrier_blocked_arr[i]]!=NULL){
-				if(TCB_arr[barr_union.barrier_blocked_arr[i]]->t_status==TS_BLOCKED){
-					TCB_arr[barr_union.barrier_blocked_arr[i]]->t_status=TS_READY;
+		for(int i=0;i<MAX_THREADS;i++){
+			if(TCB_arr[i]!=NULL&&TCB_arr[i]->block==barrier){
+				if(TCB_arr[i]->t_status==TS_BLOCKED){
+					TCB_arr[i]->t_status=TS_READY;
+					TCB_arr[i]->block=NULL;
 				}
 			}
 		}
@@ -313,6 +307,15 @@ int pthread_barrier_wait(pthread_barrier_t *barrier){
 		return PTHREAD_BARRIER_SERIAL_THREAD;
 	}
 	unlock();
+	return 0;
+}
+
+//destroy the barrier
+int pthread_barrier_destroy(pthread_barrier_t *barrier){
+	union barrier_t barr_union;
+	barr_union.count = -1;
+	barr_union.current_count = -1;
+	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 	return 0;
 }
 
