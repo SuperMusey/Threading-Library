@@ -313,8 +313,8 @@ int pthread_barrier_wait(pthread_barrier_t *barrier){
 //destroy the barrier
 int pthread_barrier_destroy(pthread_barrier_t *barrier){
 	union barrier_t barr_union;
-	barr_union.count = -1;
-	barr_union.current_count = -1;
+	barr_union.count = 0;
+	barr_union.current_count = 0;
 	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 	return 0;
 }
