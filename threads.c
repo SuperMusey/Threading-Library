@@ -292,7 +292,8 @@ int pthread_barrier_wait(pthread_barrier_t *barrier){
 	}
 	if(barr_union.current_count==barr_union.count){
 		//set to count+1 to denote that this is first thread to be released
-		barr_union.current_count++;
+		barr_union.current_count=0;
+		barr_union.count=0;
 		memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 		//unblock barrier threads when threads fall here
 		for(int i=0;i<MAX_THREADS;i++){
