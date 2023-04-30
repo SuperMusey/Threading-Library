@@ -293,7 +293,7 @@ int pthread_barrier_wait(pthread_barrier_t *barrier){
 		lock();
 
 	}
-	if(barr_union.current_count==barr_union.count){
+	if(barr_union.current_count==barr_union.count && barr_union.number_of_returns==0){
 		barr_union.number_of_returns++;
 		memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 		//unblock barrier threads when threads fall here
