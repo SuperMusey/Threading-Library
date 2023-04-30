@@ -78,6 +78,7 @@ union barrier_t{
 		int count;//total threads to count to
 		int current_count;//current number of threads blocked
 		pthread_t *barrier_blocked_arr; //store ids of the barrier blocked threads
+		int number_of_returns;
 	};
 	pthread_barrier_t barrier;
 };
@@ -267,6 +268,7 @@ int pthread_barrier_init(pthread_barrier_t *restrict barrier,const pthread_barri
 	union barrier_t barr_union;
 	barr_union.count = count;
 	barr_union.current_count = 0;
+	barr_union.number_of_returns = 0;
 	//barr_union.barrier_blocked_arr = (pthread_t*)malloc(count*sizeof(pthread_t));
 	//memset(barr_union.barrier_blocked_arr,ERROR_THREAD_ID,sizeof(barr_union.barrier_blocked_arr));
 	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
@@ -289,11 +291,10 @@ int pthread_barrier_wait(pthread_barrier_t *barrier){
 		schedule(1);
 		memcpy(&barr_union,barrier,sizeof(pthread_barrier_t));
 		lock();
+
 	}
 	if(barr_union.current_count==barr_union.count){
-		//set to count+1 to denote that this is first thread to be released
-		barr_union.current_count=0;
-		barr_union.count=0;
+		barr_union.number_of_returns++;
 		memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 		//unblock barrier threads when threads fall here
 		for(int i=0;i<MAX_THREADS;i++){
@@ -307,6 +308,12 @@ int pthread_barrier_wait(pthread_barrier_t *barrier){
 		unlock();
 		return PTHREAD_BARRIER_SERIAL_THREAD;
 	}
+	barr_union.number_of_returns++;
+	if(barr_union.number_of_returns==barr_union.count){
+		barr_union.current_count=0;
+		barr_union.number_of_returns=0;
+	}
+	memcpy(barrier,&barr_union,sizeof(pthread_barrier_t));
 	unlock();
 	return 0;
 }
